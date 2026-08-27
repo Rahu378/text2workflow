@@ -1,0 +1,242 @@
+{
+  "Comment": "Invoice Approval Workflow. Generated from: \"Send the invoice to accounting, if it is over $10k get CFO approval first, then log it in Snowflake\". PLACEHOLDER ARNs — this definition has never been deployed or executed. Substitute ${ConnectorBaseUrl}, ${EventBridgeConnectionArn} and ${HumanTaskFunctionArn} before use.",
+  "StartAt": "n_start",
+  "QueryLanguage": "JSONPath",
+  "States": {
+    "n_start": {
+      "Type": "Pass",
+      "Comment": "Workflow triggered",
+      "Next": "n1"
+    },
+    "n1": {
+      "Type": "Choice",
+      "Comment": "invoice.amount > 10,000 USD?",
+      "Choices": [
+        {
+          "Variable": "$.invoice.amount",
+          "NumericGreaterThan": 10000,
+          "Next": "n1_then",
+          "Comment": "it over $10k"
+        }
+      ],
+      "Default": "n1_merge"
+    },
+    "n1_then__failed": {
+      "Type": "Fail",
+      "Error": "StepFailed",
+      "Cause": "\"Obtain CFO approval\" exhausted its retries. Configured action: fail."
+    },
+    "n1_then": {
+      "Type": "Task",
+      "Comment": "Obtain CFO approval",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {
+        "FunctionName": "${HumanTaskFunctionArn}",
+        "Payload": {
+          "assignee": "role_cfo",
+          "subject": "Obtain CFO approval",
+          "taskToken.$": "$$.Task.Token",
+          "correlationId.$": "$.workflow.correlationId"
+        }
+      },
+      "HeartbeatSeconds": 86400,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "n1_then__failed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "n1_then_outcome"
+    },
+    "n1_then_outcome": {
+      "Type": "Choice",
+      "Comment": "CFO approved?",
+      "Choices": [
+        {
+          "Variable": "$.n1.then.outcome",
+          "StringEquals": "approved",
+          "Next": "n1_merge"
+        }
+      ],
+      "Default": "n1_then_revise"
+    },
+    "n1_then_revise__failed": {
+      "Type": "Fail",
+      "Error": "StepFailed",
+      "Cause": "\"Return to Requester for revision\" exhausted its retries. Configured action: fail."
+    },
+    "n1_then_revise": {
+      "Type": "Task",
+      "Comment": "Return to Requester for revision",
+      "Resource": "arn:aws:states:::http:invoke",
+      "Parameters": {
+        "ApiEndpoint": "${ConnectorBaseUrl}/connectors/engine/invoke",
+        "Method": "POST",
+        "Authentication": {
+          "ConnectionArn": "${EventBridgeConnectionArn}"
+        },
+        "RequestBody": {}
+      },
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "n1_then_revise__failed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "n1_then"
+    },
+    "n1_merge": {
+      "Type": "Pass",
+      "Comment": "Merge",
+      "Next": "n2"
+    },
+    "n2__failed": {
+      "Type": "Fail",
+      "Error": "StepFailed",
+      "Cause": "\"Send invoice to Accounting\" exhausted its retries. Configured action: fail."
+    },
+    "n2": {
+      "Type": "Task",
+      "Comment": "Send invoice to Accounting",
+      "Resource": "arn:aws:states:::http:invoke",
+      "Parameters": {
+        "ApiEndpoint": "${ConnectorBaseUrl}/connectors/engine/invoke",
+        "Method": "POST",
+        "Authentication": {
+          "ConnectionArn": "${EventBridgeConnectionArn}"
+        },
+        "RequestBody": {}
+      },
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "n2__failed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "n3"
+    },
+    "n3__failed": {
+      "Type": "Fail",
+      "Error": "DeadLettered",
+      "Cause": "\"Log invoice in Snowflake\" exhausted its retries. Configured action: dead-letter."
+    },
+    "n3": {
+      "Type": "Task",
+      "Comment": "Log invoice in Snowflake",
+      "Resource": "arn:aws:states:::http:invoke",
+      "Parameters": {
+        "ApiEndpoint": "${ConnectorBaseUrl}/connectors/sys_snowflake/record/insert",
+        "Method": "POST",
+        "Authentication": {
+          "ConnectionArn": "${EventBridgeConnectionArn}"
+        },
+        "RequestBody": {
+          "objectType": "invoice",
+          "objectId": "{{invoice.id}}",
+          "amount": "{{invoice.amount}}",
+          "correlationId": "{{workflow.correlationId}}",
+          "emittedBy": "{{workflow.id}}",
+          "idempotencyKey": "{{workflow.correlationId}}:n3"
+        },
+        "Headers": {
+          "Idempotency-Key": "{{workflow.correlationId}}:n3"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.Timeout",
+            "States.TaskFailed",
+            "States.Http.StatusCode.429",
+            "States.Http.StatusCode.500",
+            "States.Http.StatusCode.503"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "MaxDelaySeconds": 60,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "n3__failed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "n_audit"
+    },
+    "n_audit__failed": {
+      "Type": "Fail",
+      "Error": "DeadLettered",
+      "Cause": "\"Write immutable audit record to Snowflake\" exhausted its retries. Configured action: dead-letter."
+    },
+    "n_audit": {
+      "Type": "Task",
+      "Comment": "Write immutable audit record to Snowflake",
+      "Resource": "arn:aws:states:::http:invoke",
+      "Parameters": {
+        "ApiEndpoint": "${ConnectorBaseUrl}/connectors/sys_audit/ledger/append",
+        "Method": "POST",
+        "Authentication": {
+          "ConnectionArn": "${EventBridgeConnectionArn}"
+        },
+        "RequestBody": {
+          "workflowId": "{{workflow.id}}",
+          "correlationId": "{{workflow.correlationId}}",
+          "actor": "{{step.performer}}",
+          "decision": "{{step.outcome}}",
+          "prevHash": "{{ledger.head}}",
+          "idempotencyKey": "{{workflow.correlationId}}:n_audit"
+        },
+        "Headers": {
+          "Idempotency-Key": "{{workflow.correlationId}}:n_audit"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.Timeout",
+            "States.TaskFailed",
+            "States.Http.StatusCode.429",
+            "States.Http.StatusCode.500",
+            "States.Http.StatusCode.503"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "MaxDelaySeconds": 60,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "n_audit__failed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "n_end"
+    },
+    "n_end": {
+      "Type": "Succeed",
+      "Comment": "Process complete"
+    }
+  }
+}

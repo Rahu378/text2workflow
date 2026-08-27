@@ -1,0 +1,735 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://text2workflow.local/schema/workflow.v1.schema.json",
+  "title": "Text2Workflow Compiled Workflow",
+  "description": "The structured output of compiling a natural-language process description. Every field is derived from the source utterance plus the answers given during the clarification loop; nothing here is inferred at runtime.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "workflowId",
+    "name",
+    "source",
+    "participants",
+    "nodes",
+    "edges",
+    "governance"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "workflowId": {
+      "type": "string",
+      "pattern": "^wf_[0-9a-f]{8}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "utterance",
+        "parser",
+        "deterministic"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "utterance": {
+          "type": "string",
+          "description": "The sentence exactly as the user typed it."
+        },
+        "clauses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Segmented clauses, in the order they were written."
+        },
+        "parser": {
+          "type": "string"
+        },
+        "deterministic": {
+          "type": "boolean",
+          "const": true,
+          "description": "True because the grammar is rule-based; the same utterance and the same answers always produce this same document."
+        }
+      }
+    },
+    "participants": {
+      "type": "array",
+      "description": "Swimlanes. Anyone or anything that performs or receives a step.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "role",
+              "system",
+              "engine"
+            ]
+          },
+          "lane": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "connectors": {
+      "type": "array",
+      "description": "External systems the workflow calls.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "operations",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "enum": [
+              "registered",
+              "unregistered"
+            ],
+            "description": "'registered' means a request contract for this system is defined in this repository. It does NOT mean a live integration has been built, credentialed or tested."
+          }
+        }
+      }
+    },
+    "variables": {
+      "type": "array",
+      "description": "Fields the workflow reads at runtime, discovered from conditions.",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "type"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "examples": [
+              "invoice.amount"
+            ]
+          },
+          "type": {
+            "enum": [
+              "currency",
+              "number",
+              "string",
+              "duration",
+              "percent",
+              "boolean",
+              "literal",
+              "unknown",
+              "money"
+            ]
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "source": {
+            "type": "string"
+          },
+          "inferred": {
+            "type": "boolean",
+            "description": "True when the field was carried over from an earlier clause rather than named outright."
+          }
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "from",
+          "to"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "guard": {
+            "enum": [
+              "true",
+              "false",
+              null
+            ]
+          },
+          "back": {
+            "type": "boolean",
+            "description": "A loop edge, e.g. a rejected item returning for revision."
+          }
+        }
+      }
+    },
+    "governance": {
+      "type": "object",
+      "required": [
+        "regulatoryScope",
+        "auditTrail"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "regulatoryScope": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "PII",
+              "GDPR",
+              "HIPAA",
+              "PCI-DSS",
+              "SOX",
+              "financial-controls"
+            ]
+          },
+          "description": "Detected from vocabulary in the utterance and from the objects the flow touches. Detection is keyword-based and is a prompt for a human review, not a legal determination."
+        },
+        "auditTrail": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "mode",
+            "algorithm",
+            "mutableByOperators"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "mode": {
+              "const": "hash-chained-append-only"
+            },
+            "algorithm": {
+              "const": "SHA-256"
+            },
+            "mutableByOperators": {
+              "type": "boolean",
+              "const": false,
+              "description": "The ledger exposes append and read only. See docs/limitations.md for what this does and does not guarantee."
+            },
+            "explicitAuditStep": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "resolutions": {
+      "type": "object",
+      "description": "Answers given during the clarification loop, keyed by question id. Replaying a compile with the same resolutions reproduces the identical document.",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "name",
+        "lane"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "event.start",
+            "event.start.message",
+            "event.timer",
+            "task.approval",
+            "task.review",
+            "task.notify",
+            "task.data.write",
+            "task.data.read",
+            "task.create",
+            "task.assign",
+            "task.transform",
+            "task.terminate",
+            "task.audit",
+            "task.generic",
+            "gateway.exclusive",
+            "gateway.merge",
+            "gateway.parallel",
+            "end",
+            "end.terminate"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "lane": {
+          "type": "string"
+        },
+        "performer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "role",
+                "system",
+                "engine"
+              ]
+            },
+            "id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "object": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "operation": {
+          "$ref": "#/$defs/operation"
+        },
+        "condition": {
+          "$ref": "#/$defs/condition"
+        },
+        "sla": {
+          "$ref": "#/$defs/sla"
+        },
+        "retry": {
+          "$ref": "#/$defs/retry"
+        },
+        "timer": {
+          "type": "object"
+        },
+        "recipients": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "branches": {
+          "type": "object"
+        },
+        "triggerEvent": {
+          "type": "object"
+        },
+        "outcomeGatewayId": {
+          "type": "string"
+        },
+        "trace": {
+          "type": "object",
+          "description": "Traceability back to the sentence. Every node either quotes the clause it came from or declares that it was added by the clarification loop or by graph structure.",
+          "additionalProperties": true,
+          "properties": {
+            "clause": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "cue": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "from": {
+              "enum": [
+                "clarification",
+                "structure"
+              ]
+            },
+            "hoisted": {
+              "type": "boolean"
+            },
+            "inferredObject": {
+              "type": "boolean"
+            }
+          }
+        },
+        "timeoutSeconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "circuitBreaker": {
+          "$ref": "#/$defs/circuitBreaker"
+        },
+        "idempotency": {
+          "$ref": "#/$defs/idempotency"
+        },
+        "compensation": {
+          "$ref": "#/$defs/compensation"
+        }
+      }
+    },
+    "operation": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "connectorId",
+        "connector",
+        "operation",
+        "payload"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "connectorId": {
+          "type": "string"
+        },
+        "connector": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string",
+          "examples": [
+            "record.insert",
+            "message.send"
+          ]
+        },
+        "payload": {
+          "type": "object",
+          "description": "Mustache-style bindings resolved by the runtime from the workflow context."
+        }
+      }
+    },
+    "condition": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "unresolved": {
+          "type": "boolean",
+          "description": "True when the grammar could not extract a field/operator/value. An unresolved condition is a blocking finding, never a silent default."
+        },
+        "subject": {
+          "type": "string"
+        },
+        "subjectInferred": {
+          "type": "boolean"
+        },
+        "operator": {
+          "enum": [
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "eq",
+            "neq"
+          ]
+        },
+        "value": {},
+        "valueType": {
+          "enum": [
+            "money",
+            "number",
+            "percent",
+            "duration",
+            "literal",
+            "string"
+          ]
+        },
+        "currency": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "currencyInferred": {
+          "type": "boolean"
+        },
+        "negated": {
+          "type": "boolean"
+        },
+        "raw": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "parsed",
+            "clarified"
+          ]
+        }
+      }
+    },
+    "sla": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "durationSeconds": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "businessDays": {
+          "type": "boolean"
+        },
+        "onBreach": {
+          "enum": [
+            "escalate",
+            "alert",
+            "none"
+          ]
+        },
+        "escalateTo": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "enum": [
+            "utterance",
+            "clarified",
+            "default"
+          ],
+          "description": "`default` means the engine supplied a placeholder deadline so the blueprint is not silent about time. Unlike the retry defaults this is a guess at policy, and R-NO-SLA still asks for confirmation."
+        }
+      }
+    },
+    "retry": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Failure behaviour for one external call. Applied from the standard profile for the connector category unless the user overrode it. These are declarations for a runtime to honour; nothing in this repository executes a retry.",
+      "additionalProperties": false,
+      "properties": {
+        "maxAttempts": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total attempts including the first. 1 means no retry."
+        },
+        "backoff": {
+          "enum": [
+            "none",
+            "linear",
+            "exponential"
+          ]
+        },
+        "initialIntervalSeconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "backoffCoefficient": {
+          "type": "number",
+          "minimum": 1
+        },
+        "maxIntervalSeconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "jitter": {
+          "enum": [
+            "none",
+            "full",
+            "equal"
+          ]
+        },
+        "onExhausted": {
+          "enum": [
+            "fail",
+            "alert",
+            "dead-letter",
+            "drop"
+          ]
+        },
+        "note": {
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "default",
+            "clarified"
+          ]
+        }
+      }
+    },
+    "circuitBreaker": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Stops calling a system that is already failing, so one outage does not become a retry storm.",
+      "additionalProperties": false,
+      "properties": {
+        "failureThreshold": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "samplingWindowSeconds": {
+          "type": "number",
+          "minimum": 1
+        },
+        "openSeconds": {
+          "type": "number",
+          "minimum": 1
+        },
+        "halfOpenProbes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "onOpen": {
+          "enum": [
+            "hold-and-alert",
+            "skip-and-alert",
+            "fail"
+          ]
+        },
+        "source": {
+          "enum": [
+            "default",
+            "clarified"
+          ]
+        }
+      }
+    },
+    "idempotency": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Whether repeating this call is safe, and the key that makes it safe when it is not.",
+      "additionalProperties": false,
+      "properties": {
+        "operationIsIdempotent": {
+          "type": "boolean"
+        },
+        "keyRequired": {
+          "type": "boolean"
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Stable across retries of one step, unique across runs."
+        },
+        "header": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "targetSupportsDeduplication": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "null means nobody has confirmed it. R-DEDUP-UNVERIFIED reports that."
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "compensation": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "What undoes this write if a later step fails.",
+      "additionalProperties": false,
+      "properties": {
+        "reversible": {
+          "type": "boolean"
+        },
+        "action": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "configured": {
+          "type": "boolean"
+        },
+        "strategy": {
+          "enum": [
+            "reverse",
+            "manual-reconcile",
+            "accept",
+            null
+          ]
+        }
+      }
+    }
+  }
+}

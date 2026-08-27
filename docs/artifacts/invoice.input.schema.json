@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://text2workflow.local/contracts/wf_f8b5dee1/input.schema.json",
+  "title": "Invoice Approval Workflow — trigger payload",
+  "description": "Input contract for workflow wf_f8b5dee1, generated from the sentence:\n\"Send the invoice to accounting, if it is over $10k get CFO approval first, then log it in Snowflake\"\n\nEvery property listed is read by a decision in the workflow. A payload\nmissing one of them produces a run that cannot evaluate its own gateways.",
+  "type": "object",
+  "properties": {
+    "invoice": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Amount in USD. The workflow compares it against a threshold expressed in USD; sending another currency silently mis-routes the run. This field name was inferred from the source sentence rather than stated outright — confirm it matches your payload.",
+          "x-currency": "USD"
+        }
+      },
+      "required": [
+        "amount"
+      ],
+      "additionalProperties": true
+    },
+    "workflow": {
+      "type": "object",
+      "description": "Run metadata supplied by the caller or the runtime.",
+      "properties": {
+        "correlationId": {
+          "type": "string",
+          "description": "Stable per business transaction. Retry keys are derived from it, so it must not change between attempts."
+        },
+        "requestedBy": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "correlationId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "invoice",
+    "workflow"
+  ],
+  "additionalProperties": true
+}

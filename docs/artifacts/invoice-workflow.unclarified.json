@@ -1,0 +1,338 @@
+{
+  "schemaVersion": "1.0.0",
+  "workflowId": "wf_f8b5dee1",
+  "name": "Invoice Approval Workflow",
+  "source": {
+    "utterance": "Send the invoice to accounting, if it is over $10k get CFO approval first, then log it in Snowflake",
+    "clauses": [
+      "Send the invoice to accounting",
+      "if it is over $10k get CFO approval first",
+      "log it in Snowflake"
+    ],
+    "parser": "text2workflow-grammar/1.0",
+    "deterministic": true
+  },
+  "participants": [
+    {
+      "id": "role_cfo",
+      "name": "CFO",
+      "kind": "role",
+      "lane": "CFO"
+    },
+    {
+      "id": "role_accounting",
+      "name": "Accounting",
+      "kind": "role",
+      "lane": "Accounting"
+    },
+    {
+      "id": "sys_engine",
+      "name": "Automation Engine",
+      "kind": "engine",
+      "lane": "Automation Engine"
+    },
+    {
+      "id": "sys_snowflake",
+      "name": "Snowflake",
+      "kind": "system",
+      "lane": "Snowflake"
+    }
+  ],
+  "connectors": [
+    {
+      "id": "sys_snowflake",
+      "name": "Snowflake",
+      "category": "warehouse",
+      "operations": [
+        "record.insert"
+      ],
+      "status": "registered"
+    }
+  ],
+  "variables": [
+    {
+      "path": "invoice.amount",
+      "type": "currency",
+      "currency": "USD",
+      "source": "condition",
+      "inferred": true
+    }
+  ],
+  "nodes": [
+    {
+      "id": "n_start",
+      "type": "event.start",
+      "name": "Workflow triggered",
+      "lane": "sys_engine",
+      "performer": {
+        "kind": "engine",
+        "id": "sys_engine",
+        "name": "Automation Engine"
+      },
+      "triggerEvent": {
+        "event": "manual",
+        "source": "manual",
+        "object": null
+      },
+      "trace": {
+        "clause": null,
+        "from": "structure"
+      }
+    },
+    {
+      "id": "n1",
+      "type": "gateway.exclusive",
+      "name": "invoice.amount > 10,000 USD?",
+      "lane": "sys_engine",
+      "performer": {
+        "kind": "engine",
+        "id": "sys_engine",
+        "name": "Automation Engine"
+      },
+      "condition": {
+        "unresolved": false,
+        "subject": "invoice.amount",
+        "subjectInferred": true,
+        "operator": "gt",
+        "value": 10000,
+        "valueType": "money",
+        "currency": "USD",
+        "currencyInferred": false,
+        "negated": false,
+        "raw": "it over $10k",
+        "source": "parsed"
+      },
+      "trace": {
+        "clause": "if it is over $10k get CFO approval first",
+        "hoisted": true,
+        "candidates": null,
+        "subjectRaw": "it"
+      },
+      "branches": {
+        "positive": "Yes",
+        "negative": "No",
+        "mergeId": "n1.merge",
+        "elseHandled": false
+      }
+    },
+    {
+      "id": "n1.then",
+      "type": "task.approval",
+      "name": "Obtain CFO approval",
+      "lane": "role_cfo",
+      "performer": {
+        "kind": "role",
+        "id": "role_cfo",
+        "name": "CFO"
+      },
+      "object": null,
+      "operation": null,
+      "sla": {
+        "durationSeconds": 86400,
+        "businessDays": true,
+        "onBreach": "escalate",
+        "escalateTo": null,
+        "source": "default"
+      },
+      "retry": null,
+      "timeoutSeconds": null,
+      "circuitBreaker": null,
+      "idempotency": null,
+      "compensation": null,
+      "trace": {
+        "clause": "get CFO approval first",
+        "cue": "approval",
+        "inferredObject": false
+      }
+    },
+    {
+      "id": "n1.merge",
+      "type": "gateway.merge",
+      "name": "Merge",
+      "lane": "sys_engine",
+      "performer": {
+        "kind": "engine",
+        "id": "sys_engine",
+        "name": "Automation Engine"
+      },
+      "trace": {
+        "clause": null,
+        "from": "structure"
+      }
+    },
+    {
+      "id": "n2",
+      "type": "task.notify",
+      "name": "Send invoice to Accounting",
+      "lane": "sys_engine",
+      "performer": {
+        "kind": "engine",
+        "id": "sys_engine",
+        "name": "Automation Engine"
+      },
+      "object": "invoice",
+      "operation": null,
+      "sla": null,
+      "retry": null,
+      "timeoutSeconds": null,
+      "circuitBreaker": null,
+      "idempotency": null,
+      "compensation": null,
+      "trace": {
+        "clause": "Send the invoice to accounting",
+        "cue": "send",
+        "inferredObject": false
+      },
+      "recipients": [
+        {
+          "id": "role_accounting",
+          "name": "Accounting",
+          "kind": "role"
+        }
+      ]
+    },
+    {
+      "id": "n3",
+      "type": "task.data.write",
+      "name": "Log invoice in Snowflake",
+      "lane": "sys_snowflake",
+      "performer": {
+        "kind": "system",
+        "id": "sys_snowflake",
+        "name": "Snowflake"
+      },
+      "object": "invoice",
+      "operation": {
+        "connectorId": "sys_snowflake",
+        "connector": "Snowflake",
+        "operation": "record.insert",
+        "payload": {
+          "objectType": "invoice",
+          "objectId": "{{invoice.id}}",
+          "amount": "{{invoice.amount}}",
+          "correlationId": "{{workflow.correlationId}}",
+          "emittedBy": "{{workflow.id}}",
+          "idempotencyKey": "{{workflow.correlationId}}:n3"
+        }
+      },
+      "sla": null,
+      "retry": {
+        "maxAttempts": 4,
+        "backoff": "exponential",
+        "initialIntervalSeconds": 1,
+        "backoffCoefficient": 2,
+        "maxIntervalSeconds": 60,
+        "jitter": "full",
+        "onExhausted": "dead-letter",
+        "source": "default"
+      },
+      "timeoutSeconds": 60,
+      "circuitBreaker": {
+        "failureThreshold": 8,
+        "samplingWindowSeconds": 120,
+        "openSeconds": 120,
+        "halfOpenProbes": 2,
+        "onOpen": "hold-and-alert",
+        "source": "default"
+      },
+      "idempotency": {
+        "operationIsIdempotent": false,
+        "keyRequired": true,
+        "key": "{{workflow.correlationId}}:n3",
+        "header": "Idempotency-Key",
+        "targetSupportsDeduplication": null,
+        "reason": "a repeated warehouse write creates a second record"
+      },
+      "compensation": {
+        "reversible": true,
+        "action": "delete by key",
+        "configured": false,
+        "strategy": null
+      },
+      "trace": {
+        "clause": "log it in Snowflake",
+        "cue": "log",
+        "inferredObject": true
+      }
+    },
+    {
+      "id": "n_end",
+      "type": "end",
+      "name": "Process complete",
+      "lane": "sys_engine",
+      "performer": {
+        "kind": "engine",
+        "id": "sys_engine",
+        "name": "Automation Engine"
+      },
+      "trace": {
+        "clause": null,
+        "from": "structure"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "n_start",
+      "to": "n1",
+      "label": null,
+      "guard": null
+    },
+    {
+      "id": "e2",
+      "from": "n1",
+      "to": "n1.then",
+      "label": "Yes",
+      "guard": "true"
+    },
+    {
+      "id": "e3",
+      "from": "n1.then",
+      "to": "n1.merge",
+      "label": null,
+      "guard": null
+    },
+    {
+      "id": "e4",
+      "from": "n1",
+      "to": "n1.merge",
+      "label": "No",
+      "guard": "false"
+    },
+    {
+      "id": "e5",
+      "from": "n1.merge",
+      "to": "n2",
+      "label": null,
+      "guard": null
+    },
+    {
+      "id": "e6",
+      "from": "n2",
+      "to": "n3",
+      "label": null,
+      "guard": null
+    },
+    {
+      "id": "e7",
+      "from": "n3",
+      "to": "n_end",
+      "label": null,
+      "guard": null
+    }
+  ],
+  "governance": {
+    "regulatoryScope": [
+      "financial-controls"
+    ],
+    "auditTrail": {
+      "enabled": true,
+      "mode": "hash-chained-append-only",
+      "algorithm": "SHA-256",
+      "mutableByOperators": false,
+      "explicitAuditStep": false
+    }
+  },
+  "resolutions": {}
+}

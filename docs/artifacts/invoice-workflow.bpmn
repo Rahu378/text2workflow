@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  targetNamespace="https://text2workflow.local/schema"
+                  id="defs_wf_f8b5dee1">
+  <bpmn:collaboration id="collab_wf_f8b5dee1">
+    <bpmn:participant id="pool_main" name="Invoice Approval Workflow" processRef="wf_f8b5dee1" />
+  </bpmn:collaboration>
+  <bpmn:process id="wf_f8b5dee1" name="Invoice Approval Workflow" isExecutable="false">
+    <bpmn:laneSet id="lanes_wf_f8b5dee1">
+      <bpmn:lane id="role_cfo" name="CFO">
+        <bpmn:flowNodeRef>n1_then</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>n1_then_outcome</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="role_requester" name="Requester">
+        <bpmn:flowNodeRef>n1_then_revise</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="sys_engine" name="Automation Engine">
+        <bpmn:flowNodeRef>n_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>n1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>n1_merge</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>n2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>n_audit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>n_end</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="sys_snowflake" name="Snowflake">
+        <bpmn:flowNodeRef>n3</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+      <bpmn:startEvent id="n_start" name="Workflow triggered" />
+      <bpmn:exclusiveGateway id="n1" name="invoice.amount &gt; 10,000 USD?" />
+      <bpmn:userTask id="n1_then" name="Obtain CFO approval" camunda:candidateGroups="role_cfo" camunda:formKey="embedded:app:forms/n1_then.html" camunda:dueDate="${dateTime('P1D')}" />
+      <bpmn:exclusiveGateway id="n1_then_outcome" name="CFO approved?" />
+      <bpmn:serviceTask id="n1_then_revise" name="Return to Requester for revision" camunda:asyncBefore="true" />
+      <bpmn:exclusiveGateway id="n1_merge" name="Merge" />
+      <bpmn:serviceTask id="n2" name="Send invoice to Accounting" camunda:asyncBefore="true" />
+      <bpmn:serviceTask id="n3" name="Log invoice in Snowflake" camunda:asyncBefore="true" camunda:type="external" camunda:topic="sys_snowflake.record.insert" camunda:failedJobRetryTimeCycle="R3/PT1S">
+      <bpmn:extensionElements>
+        <camunda:properties>
+          <camunda:property name="timeoutSeconds" value="60" />
+          <camunda:property name="idempotencyHeader" value="Idempotency-Key" />
+          <camunda:property name="idempotencyKey" value="{{workflow.correlationId}}:n3" />
+          <camunda:property name="circuitBreaker.failureThreshold" value="8" />
+          <camunda:property name="circuitBreaker.openSeconds" value="120" />
+        </camunda:properties>
+      </bpmn:extensionElements>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="n_audit" name="Write immutable audit record to Snowflake" camunda:asyncBefore="true" camunda:type="external" camunda:topic="sys_audit.ledger.append" camunda:failedJobRetryTimeCycle="R3/PT1S">
+      <bpmn:extensionElements>
+        <camunda:properties>
+          <camunda:property name="timeoutSeconds" value="60" />
+          <camunda:property name="idempotencyHeader" value="Idempotency-Key" />
+          <camunda:property name="idempotencyKey" value="{{workflow.correlationId}}:n_audit" />
+          <camunda:property name="circuitBreaker.failureThreshold" value="8" />
+          <camunda:property name="circuitBreaker.openSeconds" value="120" />
+        </camunda:properties>
+      </bpmn:extensionElements>
+      </bpmn:serviceTask>
+      <bpmn:endEvent id="n_end" name="Process complete" />
+      <bpmn:sequenceFlow id="flow_1" sourceRef="n_start" targetRef="n1" />
+      <bpmn:sequenceFlow id="flow_2" sourceRef="n1_then" targetRef="n1_then_outcome" />
+      <bpmn:sequenceFlow id="flow_3" sourceRef="n1_then_outcome" targetRef="n1_then_revise" name="Rejected" />
+      <bpmn:sequenceFlow id="flow_4" sourceRef="n1_then_revise" targetRef="n1_then" name="Resubmit" />
+      <bpmn:sequenceFlow id="flow_5" sourceRef="n1" targetRef="n1_then" name="Yes" />
+      <bpmn:sequenceFlow id="flow_6" sourceRef="n1_then_outcome" targetRef="n1_merge" name="Approved" />
+      <bpmn:sequenceFlow id="flow_7" sourceRef="n1" targetRef="n1_merge" name="No" />
+      <bpmn:sequenceFlow id="flow_8" sourceRef="n1_merge" targetRef="n2" />
+      <bpmn:sequenceFlow id="flow_9" sourceRef="n2" targetRef="n3" />
+      <bpmn:sequenceFlow id="flow_10" sourceRef="n3" targetRef="n_audit" />
+      <bpmn:sequenceFlow id="flow_11" sourceRef="n_audit" targetRef="n_end" />
+  </bpmn:process>
+</bpmn:definitions>

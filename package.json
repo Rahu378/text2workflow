@@ -1,0 +1,14 @@
+{
+  "name": "text2workflow",
+  "version": "1.0.0",
+  "description": "Natural Language Process Orchestration Engine \u2014 plain English in, validated workflow JSON out.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node tests/run.js",
+    "serve": "node scripts/dev-server.mjs 5190 ."
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

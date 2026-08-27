@@ -1,0 +1,429 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Invoice Approval Workflow — connector interface",
+    "version": "1.0.0",
+    "description": "Generated from workflow `wf_f8b5dee1`, compiled from the sentence:\n\n> Send the invoice to accounting, if it is over $10k get CFO approval first, then log it in Snowflake\n\n**This describes an interface that has not been built.** Every path here\nis a contract the workflow expects a platform team to implement. No\ncredential has been issued and no call has ever been made against any of\nthese endpoints. Server URLs are placeholders.\n\nThe `x-resilience` block on each operation carries the retry, circuit\nbreaker and idempotency policy the caller applies, so the implementation\nknows what behaviour it must tolerate."
+  },
+  "servers": [
+    {
+      "url": "https://{host}/v1",
+      "variables": {
+        "host": {
+          "default": "orchestrator.internal",
+          "description": "Placeholder — no such host exists."
+        }
+      }
+    }
+  ],
+  "tags": [
+    {
+      "name": "Snowflake"
+    },
+    {
+      "name": "Engine"
+    }
+  ],
+  "paths": {
+    "/connectors/sys_snowflake/record/insert": {
+      "post": {
+        "operationId": "sys_snowflake_record_insert",
+        "summary": "Snowflake — record.insert",
+        "description": "Called by step `n3` (\"Log invoice in Snowflake\").\n**Failure behaviour the caller applies:** 4 attempts, waiting 1s and doubling up to 60s, with jitter, then dead letter.\nThe caller stops sending after 8 failures in 120s and resumes after 120s.\n**Request timeout:** 60s.",
+        "tags": [
+          "Snowflake"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Stable across retries of one step. a repeated warehouse write creates a second record. The caller retries up to 4 times, so the implementation MUST treat a repeat with the same value as the same request."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sys_snowflake_record_insert_Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accepted and applied."
+          },
+          "409": {
+            "description": "Duplicate of a request already applied, identified by the idempotency key. The caller treats this as success."
+          },
+          "429": {
+            "description": "Rate limited. Counts as a retryable failure and feeds the circuit breaker."
+          },
+          "500": {
+            "description": "Retryable failure."
+          },
+          "503": {
+            "description": "Retryable failure. Trips the circuit breaker faster than a 500."
+          }
+        },
+        "x-resilience": {
+          "timeoutSeconds": 60,
+          "retry": {
+            "maxAttempts": 4,
+            "backoff": "exponential",
+            "initialIntervalSeconds": 1,
+            "backoffCoefficient": 2,
+            "maxIntervalSeconds": 60,
+            "jitter": "full",
+            "onExhausted": "dead-letter",
+            "source": "default"
+          },
+          "circuitBreaker": {
+            "failureThreshold": 8,
+            "samplingWindowSeconds": 120,
+            "openSeconds": 120,
+            "halfOpenProbes": 2,
+            "onOpen": "hold-and-alert",
+            "source": "default"
+          },
+          "idempotency": {
+            "operationIsIdempotent": false,
+            "keyRequired": true,
+            "key": "{{workflow.correlationId}}:n3",
+            "header": "Idempotency-Key",
+            "targetSupportsDeduplication": true,
+            "reason": "a repeated warehouse write creates a second record"
+          }
+        }
+      }
+    },
+    "/connectors/sys_audit/ledger/append": {
+      "post": {
+        "operationId": "sys_audit_ledger_append",
+        "summary": "Snowflake — ledger.append",
+        "description": "Called by step `n_audit` (\"Write immutable audit record to Snowflake\").\n**Failure behaviour the caller applies:** 4 attempts, waiting 1s and doubling up to 60s, with jitter, then dead letter.\nThe caller stops sending after 8 failures in 120s and resumes after 120s.\n**Request timeout:** 60s.",
+        "tags": [
+          "Snowflake"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Stable across retries of one step. a repeated warehouse write creates a second record. The caller retries up to 4 times, so the implementation MUST treat a repeat with the same value as the same request."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sys_audit_ledger_append_Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accepted and applied."
+          },
+          "409": {
+            "description": "Duplicate of a request already applied, identified by the idempotency key. The caller treats this as success."
+          },
+          "429": {
+            "description": "Rate limited. Counts as a retryable failure and feeds the circuit breaker."
+          },
+          "500": {
+            "description": "Retryable failure."
+          },
+          "503": {
+            "description": "Retryable failure. Trips the circuit breaker faster than a 500."
+          }
+        },
+        "x-resilience": {
+          "timeoutSeconds": 60,
+          "retry": {
+            "maxAttempts": 4,
+            "backoff": "exponential",
+            "initialIntervalSeconds": 1,
+            "backoffCoefficient": 2,
+            "maxIntervalSeconds": 60,
+            "jitter": "full",
+            "onExhausted": "dead-letter",
+            "source": "default"
+          },
+          "circuitBreaker": {
+            "failureThreshold": 8,
+            "samplingWindowSeconds": 120,
+            "openSeconds": 120,
+            "halfOpenProbes": 2,
+            "onOpen": "hold-and-alert",
+            "source": "default"
+          },
+          "idempotency": {
+            "operationIsIdempotent": false,
+            "keyRequired": true,
+            "key": "{{workflow.correlationId}}:n_audit",
+            "header": "Idempotency-Key",
+            "targetSupportsDeduplication": null,
+            "reason": "a repeated warehouse write creates a second record"
+          }
+        }
+      }
+    },
+    "/tasks/human": {
+      "post": {
+        "operationId": "createHumanTask",
+        "summary": "Create a task for a person and wait for their decision",
+        "description": "Long-running. The implementation is expected to return a task token immediately and signal the workflow when the person responds.",
+        "tags": [
+          "Engine"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HumanTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Task created; the outcome arrives asynchronously."
+          },
+          "400": {
+            "description": "Unknown assignee."
+          }
+        }
+      }
+    },
+    "/notifications/send": {
+      "post": {
+        "operationId": "sendNotification",
+        "summary": "Send a notification",
+        "tags": [
+          "Engine"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Queued."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "WorkflowContext": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://text2workflow.local/contracts/wf_f8b5dee1/input.schema.json",
+        "title": "Invoice Approval Workflow — trigger payload",
+        "description": "Input contract for workflow wf_f8b5dee1, generated from the sentence:\n\"Send the invoice to accounting, if it is over $10k get CFO approval first, then log it in Snowflake\"\n\nEvery property listed is read by a decision in the workflow. A payload\nmissing one of them produces a run that cannot evaluate its own gateways.",
+        "type": "object",
+        "properties": {
+          "invoice": {
+            "type": "object",
+            "properties": {
+              "amount": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Amount in USD. The workflow compares it against a threshold expressed in USD; sending another currency silently mis-routes the run. This field name was inferred from the source sentence rather than stated outright — confirm it matches your payload.",
+                "x-currency": "USD"
+              }
+            },
+            "required": [
+              "amount"
+            ],
+            "additionalProperties": true
+          },
+          "workflow": {
+            "type": "object",
+            "description": "Run metadata supplied by the caller or the runtime.",
+            "properties": {
+              "correlationId": {
+                "type": "string",
+                "description": "Stable per business transaction. Retry keys are derived from it, so it must not change between attempts."
+              },
+              "requestedBy": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "correlationId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "invoice",
+          "workflow"
+        ],
+        "additionalProperties": true
+      },
+      "sys_snowflake_record_insert_Request": {
+        "type": "object",
+        "properties": {
+          "objectType": {
+            "type": "string",
+            "example": "invoice"
+          },
+          "objectId": {
+            "type": "string",
+            "description": "Bound at runtime from {{invoice.id}}"
+          },
+          "amount": {
+            "type": "string",
+            "description": "Bound at runtime from {{invoice.amount}}"
+          },
+          "correlationId": {
+            "type": "string",
+            "description": "Bound at runtime from {{workflow.correlationId}}"
+          },
+          "emittedBy": {
+            "type": "string",
+            "description": "Bound at runtime from {{workflow.id}}"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "example": "{{workflow.correlationId}}:n3"
+          }
+        },
+        "required": [
+          "objectType",
+          "objectId",
+          "amount",
+          "correlationId",
+          "emittedBy",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "sys_audit_ledger_append_Request": {
+        "type": "object",
+        "properties": {
+          "workflowId": {
+            "type": "string",
+            "description": "Bound at runtime from {{workflow.id}}"
+          },
+          "correlationId": {
+            "type": "string",
+            "description": "Bound at runtime from {{workflow.correlationId}}"
+          },
+          "actor": {
+            "type": "string",
+            "description": "Bound at runtime from {{step.performer}}"
+          },
+          "decision": {
+            "type": "string",
+            "description": "Bound at runtime from {{step.outcome}}"
+          },
+          "prevHash": {
+            "type": "string",
+            "description": "Bound at runtime from {{ledger.head}}"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "example": "{{workflow.correlationId}}:n_audit"
+          }
+        },
+        "required": [
+          "workflowId",
+          "correlationId",
+          "actor",
+          "decision",
+          "prevHash",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "HumanTaskRequest": {
+        "type": "object",
+        "required": [
+          "assignee",
+          "subject",
+          "correlationId"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "assignee": {
+            "type": "string",
+            "enum": [
+              "role_cfo"
+            ]
+          },
+          "subject": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "dueInSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "onBreach": {
+            "enum": [
+              "escalate",
+              "alert",
+              "none"
+            ]
+          },
+          "outcomes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "NotificationRequest": {
+        "type": "object",
+        "required": [
+          "recipients",
+          "subject",
+          "correlationId"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "recipients": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "channel": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
