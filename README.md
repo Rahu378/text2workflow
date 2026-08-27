@@ -1,5 +1,7 @@
 # Text2Workflow
 
+**[Try it live →](https://rahu378.github.io/text2workflow/)**
+
 **The Natural Language Process Orchestration Engine.** A business user types a
 process in plain English; the engine compiles it into a validated,
 schema-conformant orchestration pipeline, draws it as a swimlane blueprint, and
@@ -45,12 +47,19 @@ Answer all five and the status moves from **blocked** to **ready**.
 
 ## Try it
 
+Live at **<https://rahu378.github.io/text2workflow/>** — it is a static page, so
+everything runs in your browser and nothing you type is transmitted anywhere.
+
+Locally:
+
 ```bash
 npm run serve
 ```
 
 Then open <http://localhost:5190>. No build step, no dependencies, no network
-calls — it is `index.html` plus ES modules.
+calls — it is `index.html` plus ES modules. (`npm run serve` uses
+`scripts/dev-server.mjs` rather than `python3 -m http.server`, which sends no
+`Cache-Control` and will happily serve a stale ES module after you edit it.)
 
 ```bash
 npm test
